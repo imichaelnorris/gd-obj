@@ -2,6 +2,7 @@ extends Object
 class_name ObjParse
 
 const debug: bool = false
+const read_png_as_byte_array: bool = true
 
 # gd-obj
 #
@@ -30,11 +31,11 @@ static func load_obj(obj_path: String, mtl_path: String = "") -> Mesh:
 
 # Create mesh from obj, materials. Materials should be { "matname": data }
 static func load_obj_from_buffer(obj_data: String, materials: Dictionary) -> Mesh:
-	return _create_obj(obj_data,materials)
+	return _create_obj(obj_data, materials)
 
 # Create materials
 static func load_mtl_from_buffer(mtl_data: String, textures: Dictionary) -> Dictionary:
-	return _create_mtl(mtl_data,textures)
+	return _create_mtl(mtl_data, textures)
 	
 # Get data from file path
 static func _read_file_str(path: String) -> String:
@@ -52,7 +53,11 @@ static func _get_mtl_tex(mtl_path: String) -> Dictionary:
 	var file_paths: Array[String] = _get_mtl_tex_paths(mtl_path)
 	var textures: Dictionary = {}
 	for k in file_paths:
-		textures[k] = _get_image(mtl_path, k).save_png_to_buffer()
+		if read_png_as_byte_array:
+			var temp = _get_image_as_byte_array(mtl_path, k)
+			textures[k] = temp
+		else:
+			textures[k] = _get_image(mtl_path, k).save_png_to_buffer()
 	return textures
 
 # Get textures paths from mtl path
@@ -107,8 +112,8 @@ static func _create_mtl(obj: String, textures: Dictionary) -> Dictionary:
 					prints("Setting material color", str(currentMat.albedo_color))
 				pass
 			_:
-				if parts[0] in ["map_Kd","map_Ks","map_Ka"]:
-					var path: String = line.split(" ", false,1)[1]
+				if parts[0] in ["map_Kd", "map_Ks", "map_Ka"]:
+					var path: String = line.split(" ", false, 1)[1]
 					if textures.has(path):
 						currentMat.albedo_texture = _create_texture(textures[path])
 	return mats
@@ -130,6 +135,18 @@ static func _get_image(mtl_filepath: String, tex_filename: String) -> Image:
 	img.load(tex_filepath)
 	return img
 
+static func _get_image_as_byte_array(mtl_filepath: String, tex_filename: String) -> PackedByteArray:
+	if debug:
+		prints("Debug: Mapping texture file", tex_filename)
+	var tex_filepath: String = tex_filename
+	if tex_filename.is_relative_path():
+		tex_filepath = "%s/%s" % [mtl_filepath.get_base_dir(), tex_filename]
+	var file_type: String = tex_filepath.get_extension()
+	if debug:
+		prints("Debug: texture file path:", tex_filepath, "of type", file_type)
+	
+	return FileAccess.get_file_as_bytes(tex_filepath)
+
 static func _create_texture(data: PackedByteArray) -> ImageTexture:
 	var img: Image = Image.new()
 	img.load_png_from_buffer(data)
@@ -150,7 +167,7 @@ static func _create_obj(obj: String, mats: Dictionary) -> Mesh:
 	var faces: Dictionary = {}
 
 	var mat_name: String = "default"
-	var count_mtl: int =0
+	var count_mtl: int = 0
 	
 	# Parse
 	var lines: PackedStringArray = obj.split("\n", false)
@@ -191,7 +208,7 @@ static func _create_obj(obj: String, mats: Dictionary) -> Mesh:
 				# Face
 				if (parts.size() == 4):
 					# Tri
-					var face: Dictionary = { "v": [], "vt": [], "vn": [] }
+					var face: Dictionary = {"v": [], "vt": [], "vn": []}
 					for map in parts:
 						var vertices_index: PackedStringArray = map.split("/")
 						if (vertices_index[0] != "f"):
@@ -211,14 +228,14 @@ static func _create_obj(obj: String, mats: Dictionary) -> Mesh:
 							point.append(vertices_index[0].to_int() - 1)
 							point.append(vertices_index[1].to_int() - 1)
 							if (vertices_index.size() > 2):
-								point.append(vertices_index[2].to_int()-1)
+								point.append(vertices_index[2].to_int() - 1)
 							points.append(point)
 					for i in (points.size()):
 						if (i != 0):
-							var face = { "v":[], "vt":[], "vn":[] }
+							var face = {"v": [], "vt": [], "vn": []}
 							var point0: Array[int] = points[0]
 							var point1: Array[int] = points[i]
-							var point2: Array[int] = points[i-1]
+							var point2: Array[int] = points[i - 1]
 							face["v"].append(point0[0])
 							face["v"].append(point2[0])
 							face["v"].append(point1[0])
@@ -262,7 +279,7 @@ static func _create_obj(obj: String, mats: Dictionary) -> Mesh:
 				# Textures
 				var fan_vt: PackedVector2Array = PackedVector2Array()
 				if (face["vt"].size() > 0):
-					for k in [0,2,1]:
+					for k in [0, 2, 1]:
 						var f = face["vt"][k]
 						if (f > -1):
 							var uv = uvs[f]
